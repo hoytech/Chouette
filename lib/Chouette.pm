@@ -127,7 +127,9 @@ sub _load_function {
 
     $needed_for = "(needed for $needed_for)" if defined $needed_for;
 
-    if ($spec =~ /^(.*)::([^:]+)$/) {
+    if (ref $spec eq 'CODE') {
+        return $spec;
+    } elsif ($spec =~ /^(.*)::([^:]+)$/) {
         my ($pkg, $func_name) = ($1, $2);
         eval "require $pkg" || die "Couldn't require $pkg $needed_for\n\n$@";
         die "Couldn't find function $func_name in $pkg $needed_for" if !defined &{ "${pkg}::${func_name}" };
@@ -355,12 +357,26 @@ sub _handle_request {
 
         return if ref($err) && ($err + 0 == $c->{chouette}->{_done_gensym} + 0);
 
-        if ($err =~ /^(\d\d\d)\b/) {
+        if ($err =~ /^(\d\d\d)\b(?:\s*:\s*)?(.*)/) {
             my $status = $1;
+            my $msg = $2;
 
-            $c->logger->warn($err) if $status < 200 || $status >= 400;
+            my $body = {};
 
-            $c->respond({ http_code => $status }, $status);
+            if ($status < 200 || $status >= 400) {
+                $c->logger->warn("threw $err");
+                if (length($msg)) {
+                    $msg =~ s/ at \S+ line \d+\.$//;
+                    $body->{error} = $msg;
+                } else {
+                    $msg = "HTTP code $status";
+                }
+            } else {
+                $msg =~ s/ at \S+ line \d+\.$//;
+                $body->{ok} = $msg;
+            }
+
+            $c->respond($body, $status);
             return;
         }
 
@@ -451,6 +467,7 @@ To store the logs in files, and rotate them periodically. Also maintains a curre
 
 =back
 
+L<Chouette> will always depend on the above modules, so if your app uses them it is sufficient to depend on C<Chouette> alone.
 
 
 =head1 CHOUETTE OBJECT
@@ -461,9 +478,9 @@ To start a server, create a C<Chouette> object. The constructor accepts a hash r
 
 =item C<config_file>
 
-This path is where the config file will be read from. Its format is L<YAML>.
+This path is where the config file will be read from. If this parameter is not provided then no file will be used.
 
-The only required parameters are C<var_dir> and C<listen> (though these can be defaulted with the C<config_defaults> parameter below).
+The file's format is L<YAML>. The only required parameters in the file are C<var_dir> and C<listen> (though these can be defaulted with the C<config_defaults> parameter below).
 
 =item C<config_defaults>
 
@@ -555,7 +572,7 @@ If set, suppress the "welcome" message:
     Listening on: http://0.0.0.0:8080
 
     Follow log messages:
-        log-defer-viz -F /var/myapi/logs/mpapi.current.log
+        log-defer-viz -F /var/myapi/logs/myapi.current.log
 
     ===============================================================================
 
@@ -574,7 +591,7 @@ and
 
 =head1 CONTEXT
 
-There is a C<Chouette::Context> object passed into every handler. It represents the current request and various related items.
+There is a C<Chouette::Context> object passed into every handler. Typically we name it C<$c>. It represents the current request and various related items.
 
 =over
 
@@ -667,6 +684,8 @@ See L<AnyEvent::Task> for more details.
 
 
 =head1 EXAMPLE
+
+These files are a complete-ish Chouette application that I have extracted from a real-world app. Warning: untested!
 
 =over
 

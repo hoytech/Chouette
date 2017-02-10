@@ -41,6 +41,8 @@ sub new {
         %$config,
     };
 
+    $self->{quiet} = $app_spec->{quiet};
+
     $self->_validate_config();
 
     $self->_compile_app();
@@ -309,6 +311,8 @@ sub serve {
         };
     });
 
+    return if $self->{quiet};
+
     say "="x79;
     say;
     say "Chouette $VERSION";
@@ -443,7 +447,7 @@ Note that Chouette also depends on L<Log::Defer::Viz> for viewing the logs.
 
 To store the logs in files, and rotate them periodically. Also maintains a current symlink so you can simply run the following in a shell and you'll always see the latest logs as you need them:
 
-    $ log-defer-viz -F /var/myapi/logs/lpapid.current.log
+    $ log-defer-viz -F /var/myapi/logs/myapi.current.log
 
 =back
 
@@ -537,6 +541,23 @@ C<checkout_caching> means that if a checkout is obtained and released, it will b
 Additional arguments to L<AnyEvent::Task::Client> and <AnyEvent::Task::Server> can be passed in via C<client> and C<server>.
 
 See the C<bin/myapi> and C<lib/MyAPI/Task/PasswordHasher.pm> files for an example.
+
+=item C<quiet>
+
+If set, suppress the "welcome" message:
+
+    ===============================================================================
+
+    Chouette 0.100
+
+    PID = 31713
+    UID/GIDs = 1000/1000 4 20 24 27 30 46 113 129 1000
+    Listening on: http://0.0.0.0:8080
+
+    Follow log messages:
+        log-defer-viz -F /var/myapi/logs/mpapi.current.log
+
+    ===============================================================================
 
 =back
 
@@ -713,7 +734,7 @@ See L<AnyEvent::Task> for more details.
     sub authenticate {
         my ($c, $cb) = @_;
 
-        if ($c->{env}->{PATH_INFO} =~ m{^/lpapi/unauth/}) {
+        if ($c->{env}->{PATH_INFO} =~ m{^/myapi/unauth/}) {
             return $cb->();
         }
 

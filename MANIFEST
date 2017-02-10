@@ -1,3 +1,5 @@
 Changes
+lib/Chouette.pm
+lib/Chouette/Context.pm
 Makefile.PL
 MANIFEST

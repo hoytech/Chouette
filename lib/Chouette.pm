@@ -555,9 +555,11 @@ Note that routes are combined with L<Regexp::Assemble> so don't worry about havi
 
 
 
-=head1 SYNOPSIS
+=head1 EXAMPLE
 
-C<bin/myapi> :
+=over
+
+=item C<bin/myapi>
 
     #!/usr/bin/env perl
 
@@ -612,7 +614,7 @@ C<bin/myapi> :
     $chouette->run;
 
 
-C<lib/MyAPI/Auth.pm> :
+=item C<lib/MyAPI/Auth.pm>
 
     package MyAPI::Auth;
 
@@ -642,7 +644,7 @@ C<lib/MyAPI/Auth.pm> :
     1;
 
 
-C<lib/MyAPI/User.pm> :
+=item C<lib/MyAPI/User.pm>
 
     package MyAPI::User;
 
@@ -679,7 +681,7 @@ C<lib/MyAPI/User.pm> :
 
 
 
-C<lib/MyAPI/Resource.pm> :
+=item C<lib/MyAPI/Resource.pm>
 
     package MyAPI::Auth;
 
@@ -705,7 +707,7 @@ C<lib/MyAPI/Resource.pm> :
 
 
 
-C<lib/MyAPI/Task/PasswordHasher.pm> :
+=item C<lib/MyAPI/Task/PasswordHasher.pm>
 
     package MyAPI::Task::PasswordHasher;
 
@@ -751,7 +753,7 @@ C<lib/MyAPI/Task/PasswordHasher.pm> :
 
 
 
-C<lib/MyAPI/Task/DB.pm> :
+=item C<lib/MyAPI/Task/DB.pm>
 
     package MyAPI::Task::DB;
 
@@ -779,6 +781,8 @@ C<lib/MyAPI/Task/DB.pm> :
     }
 
     1;
+
+=back
 
 
 

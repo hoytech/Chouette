@@ -446,9 +446,105 @@ To store the logs in files, and rotate them periodically. Also maintains a curre
 =back
 
 
-=head1 CONSTRUCTOR
+=head1 CHOUETTE OBJECT
 
-config params: var_dir listen logging
+To start a server, create a C<Chouette> object. The constructor accepts a hash ref with the following parameters. See the C<bin/myapi> file below for a full example.
+
+=over
+
+=item C<config_file>
+
+This path is where the config file will be read from. Its format is L<YAML>.
+
+The only required parameters are C<var_dir> and C<listen> (though these can be defaulted with the C<config_defaults> parameter below).
+
+=item C<config_defaults>
+
+This hash is where you provide default config values. These values can be overridden by the config file.
+
+You can use the config store for values specific to your application (it is accessible with the C<config> method of the context), but here are the values that C<Chouette> itself looks for:
+
+C<var_dir> - This directory must exist and be writable. C<Chouette> will use this to store log files and L<AnyEvent::Task> sockets.
+
+C<listen> - This is the location the Chouette server will listen on. Examples: C<8080> C<127.0.0.1:8080> C<unix:/var/myapi/myapi.socket>
+
+C<logging.file_prefix> - The prefix for log file names.
+
+C<logging.timezone> - Either C<gmtime> or C<localtime> (See L<Log::File::Rolling>).
+
+=item C<middleware>
+
+Any array-ref of L<Plack::Middleware> packages.
+
+    middleware => [
+        'Plack::Middleware::ContentLength',
+        ['Plack::Middleware::CrossOrigin', origins => '*'],
+    ],
+
+FIXME: not fully implemented yet...
+
+=item C<pre_route>
+
+A package and function that will be called with a context and callback. If the function determines the request processing should continue, it should call the callback.
+
+See the C<lib/MyAPI/Auth.pm> file below for an example of the function.
+
+=item C<routes>
+
+Routes are specified when you create the C<Chouette> object.
+
+    routes => {
+        '/myapi/resource' => {
+            POST => 'MyAPI::Resource::create',
+            GET => 'MyAPI::Resource::get_all',
+        },
+
+        '/myapi/resource/:resource_id' => {
+            GET => 'MyAPI::Resource::get_by_id',
+        },
+    },
+
+For each route, it will try to C<require> the package specified, and obtain the function specified for each HTTP method. If the package or function doesn't exists, an error will be thrown.
+
+You can use C<:name> elements in your routes to extract parameters. They are accessible via the C<route_params> method of the context (see C<lib/MyAPI/Resource.pm> below).
+
+Note that routes are combined with L<Regexp::Assemble> so don't worry about having lots of routes, it doesn't loop over each one.
+
+See the C<bin/myapi> file below for an example.
+
+=item C<tasks>
+
+This is a hash-ref of L<AnyEvent::Task> servers/clients to create.
+
+    tasks => {
+        db => {
+            pkg => 'LPAPI::Task::DB',
+            checkout_caching => 1,
+            client => {
+                timeout => 20,
+            },
+            server => {
+                hung_worker_timeout => 60,
+            },
+        },
+    },
+
+C<checkout_caching> means that if a checkout is obtained and released, it will be maintained for the duration of the request and if another checkout for this task is obtained, then the original will be returned. This is useful for DBI for example, because we want the authenticate handler to run in the same transaction as the handler (for both correctness and efficiency reasons).
+
+Additional arguments to L<AnyEvent::Task::Client> and <AnyEvent::Task::Server> can be passed in via C<client> and C<server>.
+
+See the C<bin/myapi> and C<lib/MyAPI/Task/PasswordHasher.pm> files for an example.
+
+=back
+
+After the C<Chouette> object is obtained, you should call C<serve> or C<run>. They are basically the same except C<serve> returns whereas C<run> enters the L<AnyEvent> event loop. These are equivalent:
+
+    $chouette->run;
+
+and
+
+    $chouette->serve;
+    AE::cv->recv;
 
 
 
@@ -458,7 +554,7 @@ There is a C<Chouette::Context> object passed into every handler. It represents 
 
 =over
 
-=item respond
+=item C<respond>
 
 The respond method sends a JSON response, which will be encoded from the first argument:
 
@@ -480,7 +576,7 @@ If you are happy with the L<Feersum> default message ("Forbidden" in this case) 
 
     die 403;
 
-=item done
+=item C<done>
 
 If you wish to stop processing but not send a response:
 
@@ -490,13 +586,13 @@ You will need to send a response later, usually from an async callback. Note: If
 
 You don't need to call C<done>, you can just C<return> from the handler. C<done> is just for convenience if you are deeply nested in callbacks and don't want to worry about writing a bunch of returning logic.
 
-=item respond_raw
+=item C<respond_raw>
 
 Similar to C<respond> except it doesn't assume JSON encoding:
 
     $c->respond_raw(200, 'text/plain', 'some plain text');
 
-=item logger
+=item C<logger>
 
 Returns the L<Log::Defer> object associated with the request:
 
@@ -509,25 +605,25 @@ Returns the L<Log::Defer> object associated with the request:
 
 See the L<Log::Defer> docs for more details. For viewing the log messages, check out L<Log::Defer::Viz>.
 
-=item config
+=item C<config>
 
-Returns the C<config> hash. See the L<CONSTRUCTOR> section for details.
+Returns the C<config> hash. See the L<CHOUETTE OBJECT> section for details.
 
-=item req
+=item C<req>
 
 Returns the L<Plack::Request> object created by this request.
 
     my $name = $c->req->parameters->{name};
 
-=item res
+=item C<res>
 
 FIXME: The L<Plack::Response> object isn't used currently.
 
-=item generate_token
+=item C<generate_token>
 
 Generates a L<Session::Token> random string. The Session::Token generator is created when the first request comes in so as to avoid "cold" entropy pool immediately after a reboot (see L<Session::Token> docs).
 
-=item task
+=item C<task>
 
 Returns an <AnyEvent::Task> checkout object for the task with the given name:
 
@@ -543,15 +639,6 @@ See L<AnyEvent::Task> for more details.
 =back
 
 
-=head1 ROUTES
-
-Routes are specified when you create the C<Chouette> object. See the C<bin/myapi> file below.
-
-For each route, it will try to C<require> the package specified, and obtain the function specified for each HTTP method. If the package or function doesn't exists, an error will be thrown.
-
-You can use C<:name> elements in your routes to extract parameters. They are accessible via the C<route_params> method of the context (see C<lib/MyAPI/Resource.pm> below).
-
-Note that routes are combined with L<Regexp::Assemble> so don't worry about having lots of routes, it doesn't loop over each one.
 
 
 
@@ -788,7 +875,7 @@ Note that routes are combined with L<Regexp::Assemble> so don't worry about havi
 
 =head1 SEE ALSO
 
-Much more documentation can be found in the modules linked in the L<DESCRIPTION> section.
+More documentation can be found in the modules linked in the L<DESCRIPTION> section.
 
 L<Chouette github repo|https://github.com/hoytech/Chouette>
 

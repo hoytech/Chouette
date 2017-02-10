@@ -415,7 +415,9 @@ Chouette - REST API Framework
 
 L<Chouette> is a framework for making HTTP services. It is primarily designed for services that implement REST-like APIs using C<application/json> as input and C<application/x-www-form-urlencoded> as output, although this is somewhat flexible.
 
-Chouette was extracted from numerous REST API services I have made before, and its main purpose is to glue together the following modules in the way they were designed to be used:
+Why "chouette"? A L<backgammon chouette|http://www.bkgm.com/variants/Chouette.html> is a fast-paced, exciting game with lots going on at once, kind of like an asynchronous REST API server. :)
+
+Chouette was extracted from numerous services I have made before, and its main purpose is to glue together the following modules in the way they were designed to be used:
 
 =over
 
@@ -446,6 +448,7 @@ To store the logs in files, and rotate them periodically. Also maintains a curre
 =back
 
 
+
 =head1 CHOUETTE OBJECT
 
 To start a server, create a C<Chouette> object. The constructor accepts a hash ref with the following parameters. See the C<bin/myapi> file below for a full example.
@@ -468,9 +471,9 @@ C<var_dir> - This directory must exist and be writable. C<Chouette> will use thi
 
 C<listen> - This is the location the Chouette server will listen on. Examples: C<8080> C<127.0.0.1:8080> C<unix:/var/myapi/myapi.socket>
 
-C<logging.file_prefix> - The prefix for log file names.
+C<logging.file_prefix> - The prefix for log file names (default is C<app>).
 
-C<logging.timezone> - Either C<gmtime> or C<localtime> (See L<Log::File::Rolling>).
+C<logging.timezone> - Either C<gmtime> or C<localtime> (C<gmtime> is default, see L<Log::File::Rolling>).
 
 =item C<middleware>
 
@@ -481,7 +484,7 @@ Any array-ref of L<Plack::Middleware> packages.
         ['Plack::Middleware::CrossOrigin', origins => '*'],
     ],
 
-FIXME: not fully implemented yet...
+FIXME: this is not fully implemented yet...
 
 =item C<pre_route>
 

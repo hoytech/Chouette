@@ -456,11 +456,17 @@ Chouette - REST API Framework
 
 =head1 DESCRIPTION
 
-L<Chouette> is a framework for making HTTP services. It is primarily designed for services that implement REST-like APIs using C<application/json> as input and C<application/x-www-form-urlencoded> as output, although this is somewhat flexible.
+L<Chouette> is a framework for making asynchronous HTTP services. It makes some opinionated design choices, but is otherwise fairly flexible.
 
-Why "chouette"? A L<backgammon chouette|http://www.bkgm.com/variants/Chouette.html> is a fast-paced, exciting game with lots going on at once, kind of like an asynchronous REST API server. :)
+L<AnyEvent> is used as the glue to connect all the asynchronous libraries, although Chouette depends on L<Feersum> and therefore L<EV> for its event loop. It uses L<Feersum> in PSGI mode so it can use L<Plack> for request parsing, and has support for L<Plack::Middleware> wrappers. L<Feersum> is the least conservative choice in the stack but there aren't very many alternatives (L<Twiggy> is a possibility but you need a hack to use unix sockets and is also somewhat buggy).
 
-Chouette was extracted from numerous services I have built before, and its main purpose is to glue together the following of my modules in the way they were designed to be used:
+Chouette generally assumes that its input will be C<application/x-www-form-urlencoded>. L<Plack::Request::WithEncoding> is used so that text is properly decoded (we recommend UTF-8 of course). On the output side, the default is C<application/json> encoded with L<JSON::XS>. Both the input and output types can be modified, although this is not really documented yet.
+
+Chouette apps can optionally load a config file and its format is C<YAML>, loaded with the L<YAML> module. L<Regexp::Assemble> is used to construct an efficient route-dispatch.
+
+Leaving the above aside, Chouette's main purpose is to glue together several of my own modules into a cohesive whole. These modules have been designed to work together and I have used them all to build numerous services before, some of which handle a considerable amount of traffic and/or have very complicated requirements.
+
+Chouette was extracted from some of these services I have built before, and I have given the extra effort required so that all the modules work together in the ways they were designed:
 
 =over
 
@@ -490,20 +496,16 @@ To store the logs in files, and rotate them periodically. Also maintains a curre
 
 =back
 
-L<Chouette> will always depend on the above modules, so if your app uses them it is sufficient to depend on C<Chouette> alone.
+Chouette will always depend on L<AnyEvent::Task>, L<Callback::Frame>, L<Session::Token>, and L<Log::Defer> so if your app also uses them then it is sufficient to depend on C<Chouette> alone.
+
+Where does the name "Chouette" come from? A L<chouette|http://www.bkgm.com/variants/Chouette.html> is a multi-player, fast-paced backgammon game with lots of stuff going on at once, kind of like an asynchronous REST API server... Hmmm, a bit of a stretch isn't it? To be honest it's just a cool name and I love backgammon, especially chouettes with friends and beer. :)
 
 
 =head1 CHOUETTE OBJECT
 
-To start a server, create a C<Chouette> object. The constructor accepts a hash ref with the following parameters. See the C<bin/myapi> file below for a full example.
+To start a server, create a C<Chouette> object. The constructor accepts a hash ref with the following parameters. Most are optional. See the C<bin/myapi> file below for a full example.
 
 =over
-
-=item C<config_file>
-
-This path is where the config file will be read from. If this parameter is not provided then no file will be used.
-
-The file's format is L<YAML>. The only required parameters in the file are C<var_dir> and C<listen> (though these can be defaulted with the C<config_defaults> parameter below).
 
 =item C<config_defaults>
 
@@ -519,27 +521,15 @@ C<logging.file_prefix> - The prefix for log file names (default is C<app>).
 
 C<logging.timezone> - Either C<gmtime> or C<localtime> (C<gmtime> is default, see L<Log::File::Rolling>).
 
-=item C<middleware>
+The only required config parameters are C<var_dir> and C<listen> (though these can be omitted from the defaults assuming they will be specified in the config file, see below).
 
-Any array-ref of L<Plack::Middleware> packages. Either strings representing packages, or an array-ref where the first element is the package and the rest are the arguments to the middleware.
+=item C<config_file>
 
-The strings representing packages can either be prefixed with C<Plack::Middleware::> or not. If not, it will try the package as is and if that doesn't exist, it will try adding the C<Plack::Middleware::> prefix.
-
-    middleware => [
-        'Plack::Middleware::ContentLength',
-        'ETag',
-        ['Plack::Middleware::CrossOrigin', origins => '*'],
-    ],
-
-=item C<pre_route>
-
-A package and function that will be called with a context and callback. If the function determines the request processing should continue, it should call the callback.
-
-See the C<lib/MyAPI/Auth.pm> file below for an example of the function.
+If you want a config file, this path is where it will be read from. The file's format is L<YAML>. The values in this file over-ride the values in C<config_defaults>. If this parameter is not provided then it will not attempt to load a config file and defaults will be used.
 
 =item C<routes>
 
-Routes are specified when you create the C<Chouette> object.
+Routes are specified as a hash-ref of route paths, mapping to hash-refs of methods, mapping to package+function names or callbacks. For example:
 
     routes => {
         '/myapi/resource' => {
@@ -554,15 +544,39 @@ Routes are specified when you create the C<Chouette> object.
                 die "400: can't update ID " . $c->route_params->{resource_id};
             },
         },
+
+        '/myapi/upload' => {
+            PUT => 'MyAPI::Upload::upload',
+        }
     },
 
-For each route, it will try to C<require> the package specified, and obtain the function specified for each HTTP method. If the package or function doesn't exists, an error will be thrown.
+For each route, if a package+function name is used it will try to C<require> the package specified, and obtain the function specified for each HTTP method. If the package or function doesn't exists, an error will be thrown.
 
-You can use C<:name> elements in your routes to extract parameters. They are accessible via the C<route_params> method of the context (see C<lib/MyAPI/Resource.pm> below).
+You can use C<:param> path elements in your routes to extract parameters from the path. They are accessible via the C<route_params> method of the context (see C<lib/MyAPI/Resource.pm> below).
 
-Note that routes are combined with L<Regexp::Assemble> so don't worry about having lots of routes, it doesn't loop over each one.
+Note that routes are combined with L<Regexp::Assemble> so we don't have to loop over every possible route for every request, in case you have a lot of routes. For example, here is the regexp used for the above routes:
+
+    \A/myapi/(?:resource(?:/(?<resource_id>[^/]+)\z(?{2})|\z(?{1}))|upload\z(?{0}))
 
 See the C<bin/myapi> file below for an example.
+
+=item C<pre_route>
+
+A package+function or callback that will be called with a context and a resume callback. If the function determines the request processing should continue, it should call the resume callback.
+
+See the C<lib/MyAPI/Auth.pm> file below for an example of the function.
+
+=item C<middleware>
+
+Any array-ref of L<Plack::Middleware> packages. Each element is either a string representing a function+package, or an array-ref where the first element is the package and the rest of the elements are the arguments to the middleware.
+
+The strings representing packages can either be prefixed with C<Plack::Middleware::> or not. If not, it will try the package as is and if that doesn't exist, it will try adding the C<Plack::Middleware::> prefix.
+
+    middleware => [
+        'Plack::Middleware::ContentLength',
+        'ETag',
+        ['Plack::Middleware::CrossOrigin', origins => '*'],
+    ],
 
 =item C<tasks>
 
@@ -581,11 +595,13 @@ This is a hash-ref of L<AnyEvent::Task> servers/clients to create.
         },
     },
 
-C<checkout_caching> means that if a checkout is obtained and released, it will be maintained for the duration of the request and if another checkout for this task is obtained, then the original will be returned. This is useful for DBI for example, because we want the authenticate handler to run in the same transaction as the handler (for both correctness and efficiency reasons).
+Route handlers can acquire checkouts by calling the C<task> method on the context object.
+
+C<checkout_caching> means that if a checkout is obtained and released, it will be cached for the duration of the request so if another checkout for this task is obtained, then the original will be returned. This is useful for C<pre_route> handlers that use L<DBI> for example, because we want the authenticate handler to run in the same transaction as the handler (for both correctness and efficiency reasons).
 
 Additional arguments to L<AnyEvent::Task::Client> and <AnyEvent::Task::Server> can be passed in via C<client> and C<server>.
 
-See the C<bin/myapi> and C<lib/MyAPI/Task/PasswordHasher.pm> files for an example.
+See the C<bin/myapi>, C<lib/MyAPI/Task/PasswordHasher.pm>, and C<lib/MyAPI/Task/DB.pm> files for examples.
 
 =item C<quiet>
 
@@ -629,7 +645,9 @@ The respond method sends a JSON response, which will be encoded from the first a
 
     $c->respond({ a => 1, b => 2, });
 
-Note: After responding, this method returns and your code continues. If you call C<respond> again, an error will be logged but the second response will not be sent (it can't be -- the connection is probably already closed). If you wish to stop processing, you can C<die> with the result from C<respond> since it returns a special object for this purpose:
+Note: After responding, this method returns and your code continues. This is useful if you wish to do additional work after sending the response. If you call C<respond> on this context again, an error will be logged. The the second response will not be sent (it can't be since the connection is probably already closed).
+
+If you wish to stop processing, you can C<die> with the result from C<respond> since it returns a special object for this purpose:
 
     die $c->respond({ a => 1, });
 
@@ -637,11 +655,13 @@ C<respond> takes an optional second argument which is the HTTP response code (de
 
     $c->respond({ error => "access denied" }, 403);
 
-Note that processing continues here again. If you wish to terminate the processing right away, prefix with C<die> as above, or use the following shortcut:
+Note that processing continues here also. If you wish to terminate the processing right away, prefix with C<die> as above, or use the following shortcut:
 
     die "403: access denied";
 
-If you are happy with the L<Feersum> default message ("Forbidden" in this case) you can just do:
+The client will receive an HTTP response with the L<Feersum> default message ("Forbidden" in this case) and the JSON body will be C<{"error":"access denied"}>.
+
+This works too, except the response in the JSON body will just be "HTTP code 403":
 
     die 403;
 
@@ -653,13 +673,13 @@ If you wish to stop processing but not send a response:
 
 You will need to send a response later, usually from an async callback. Note: If the last reference to the context is destroyed without a response being sent, a 500 "internal server error" response will be sent.
 
-You don't need to call C<done>, you can just C<return> from the handler. C<done> is just for convenience if you are deeply nested in callbacks and don't want to worry about writing a bunch of returning logic.
+You don't ever need to call C<done>. You can just C<return> from the handler instead. C<done> is just for convenience in case you are deeply nested in callbacks and don't want to worry about writing a bunch of nested returns.
 
 =item C<respond_raw>
 
 Similar to C<respond> except it doesn't assume JSON encoding:
 
-    $c->respond_raw(200, 'text/plain', 'some plain text');
+    $c->respond_raw(200, 'text/plain', 'here is some plain text');
 
 =item C<logger>
 
@@ -680,17 +700,17 @@ Returns the C<config> hash. See the L<CHOUETTE OBJECT> section for details.
 
 =item C<req>
 
-Returns the L<Plack::Request> object created by this request.
+Returns the L<Plack::Request> object created for this request.
 
     my $name = $c->req->parameters->{name};
 
 =item C<res>
 
-You would think this would return a L<Plack::Response> object but this isn't yet implemented and will instead throw an error.
+One would think this would return a L<Plack::Response> object. Unfortunately this isn't yet implemented and will instead throw an error.
 
 =item C<generate_token>
 
-Generates a L<Session::Token> random string. The Session::Token generator is created when the first request comes in so as to avoid "cold" entropy pool immediately after a reboot (see L<Session::Token> docs).
+Generates a random string using a default-config L<Session::Token> generator. The generator is created when the first request comes in so as to avoid a "cold" entropy pool immediately after a reboot (see the L<Session::Token> docs).
 
 =item C<task>
 
@@ -702,6 +722,10 @@ Returns an <AnyEvent::Task> checkout object for the task with the given name:
 
         die $c->respond($row);
     });
+
+Checkout options can be passed after the task name:
+
+    $c->task('db', timeout => 5)->selectrow_hashref(...);
 
 See L<AnyEvent::Task> for more details.
 
@@ -842,7 +866,7 @@ These files are a complete-ish Chouette application that I have extracted from a
 
 =item C<lib/MyAPI/Resource.pm>
 
-    package MyAPI::Auth;
+    package MyAPI::Resource;
 
     use common::sense;
 

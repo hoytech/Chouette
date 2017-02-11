@@ -1,7 +1,9 @@
 Changes
 ex/hello-world.pl
+ex/MyTask.pm
 ex/some-features.pl
 lib/Chouette.pm
 lib/Chouette/Context.pm
 Makefile.PL
 MANIFEST
+t/basic.t

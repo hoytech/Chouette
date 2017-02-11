@@ -173,7 +173,7 @@ sub _listen {
 
         $socket = IO::Socket::UNIX->new(
             Listen => 5,
-            Type => SOCK_STREAM(),
+            Type => IO::Socket::SOCK_STREAM(),
             Local => $socket_file,
         ) || die "unable to listen on $listen : $!";
 

@@ -25,6 +25,10 @@ my %args = (
       'Log::File::Rolling' => 0,
       'Log::Defer::Viz' => 0, ## FIXME: maybe shouldn't be required for production?
     },
+    TEST_REQUIRES => {
+      'AnyEvent::HTTP' => 0,
+      'File::Temp' => 0,
+    },
     LIBS => [],
     DEFINE => '',
     LICENSE => 'perl',

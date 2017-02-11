@@ -1,4 +1,5 @@
-package MyTask;
+package # hide from PAUSE
+    MyTask;
 
 use AnyEvent::Task::Logger;
 

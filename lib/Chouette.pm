@@ -686,7 +686,7 @@ Returns the L<Plack::Request> object created by this request.
 
 =item C<res>
 
-FIXME: The L<Plack::Response> object isn't used currently.
+You would think this would return a L<Plack::Response> object but this isn't yet implemented and will instead throw an error.
 
 =item C<generate_token>
 

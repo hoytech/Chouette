@@ -23,7 +23,7 @@ my %args = (
       'Session::Token' => 0,
       'Log::Defer' => 0,
       'Log::File::Rolling' => 0,
-      'Log::Defer::Viz' => 0, ## FIXME: maybe shouldn't be required for production?
+      'Log::Defer::Viz' => 0,
     },
     TEST_REQUIRES => {
       'AnyEvent::HTTP' => 0,

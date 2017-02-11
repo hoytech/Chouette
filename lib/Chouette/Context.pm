@@ -18,8 +18,6 @@ sub new {
     $self->{req} = Plack::Request::WithEncoding->new($self->{env});
     $self->{req}->env->{'plack.request.withencoding.encoding'} = 'utf-8';
 
-    $self->{res} = Plack::Response->new();
-
 
     my $raw_logger = $self->{chouette}->{raw_logger};
 
@@ -46,7 +44,7 @@ sub new {
 sub config { shift->{chouette}->{config} }
 sub logger { shift->{log_defer_obj} }
 sub req { shift->{req} }
-sub res { shift->{res} }
+sub res { die "Plack response object not yet supported" }
 sub route_params { shift->{route_params} // {} }
 
 

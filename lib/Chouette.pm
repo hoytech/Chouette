@@ -460,7 +460,7 @@ L<Chouette> is a framework for making HTTP services. It is primarily designed fo
 
 Why "chouette"? A L<backgammon chouette|http://www.bkgm.com/variants/Chouette.html> is a fast-paced, exciting game with lots going on at once, kind of like an asynchronous REST API server. :)
 
-Chouette was extracted from numerous services I have made before, and its main purpose is to glue together the following modules in the way they were designed to be used:
+Chouette was extracted from numerous services I have built before, and its main purpose is to glue together the following of my modules in the way they were designed to be used:
 
 =over
 
@@ -480,7 +480,7 @@ For random identifiers such as session tokens (obviously).
 
 Structured logging, properly integrated with L<AnyEvent::Task> so your tasks can log messages into the proper request log contexts.
 
-Note that Chouette also depends on L<Log::Defer::Viz> for viewing the logs.
+Note that Chouette also depends on L<Log::Defer::Viz> so C<log-defer-viz> will be available for viewing logs.
 
 =item L<Log::File::Rolling>
 

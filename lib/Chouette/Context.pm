@@ -97,12 +97,12 @@ sub generate_token {
 
 
 sub task {
-    my ($self, $task_name) = @_;
+    my ($self, $task_name, %checkout_opts) = @_;
 
     return $self->{task_checkouts}->{$task_name} if $self->{task_checkouts}->{$task_name};
 
     my $client = $self->{chouette}->{task_clients}->{$task_name} // die "no such task: '$task_name'";
-    my $checkout = $client->checkout(log_defer_object => $self->logger);
+    my $checkout = $client->checkout(log_defer_object => $self->logger, %checkout_opts);
 
     $self->{task_checkouts}->{$task_name} = $checkout if $self->{chouette}->{task_checkout_caching}->{$task_name};
 

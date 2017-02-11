@@ -1,4 +1,6 @@
 Changes
+ex/hello-world.pl
+ex/some-features.pl
 lib/Chouette.pm
 lib/Chouette/Context.pm
 Makefile.PL

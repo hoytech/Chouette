@@ -67,8 +67,23 @@ sub _compile_app {
 
     ## Middleware
 
-    foreach my $pkg (@{ $self->{app_spec}->{middleware} }) {
-        eval "require $pkg" || die "Couldn't require middleware $pkg\n\n$@";
+    foreach my $middleware_spec (@{ $self->{app_spec}->{middleware} }) {
+        $middleware_spec = [ $middleware_spec ] if !ref($middleware_spec);
+        $middleware_spec = [ @$middleware_spec ]; ## copy so don't destroy app_spec version
+
+        my $pkg = $middleware_spec->[0];
+
+        if ($pkg =~ m{^Plack::Middleware::}) {
+            eval "require $pkg" || die "Couldn't require middleware $pkg\n\n$@";
+        } else {
+            if (!eval "require $pkg") {
+                my $new_pkg = "Plack::Middleware::" . $pkg;
+                eval "require $new_pkg" || die "Couldn't require middleware $pkg (or $new_pkg)";
+                $middleware_spec->[0] = $new_pkg;
+            }
+        }
+
+        push @{ $self->{middleware_specs} }, $middleware_spec;
     }
 
 
@@ -297,7 +312,7 @@ sub serve {
     $self->{feersum} = Feersum->endjinn;
     $self->{feersum}->use_socket($self->{accept_socket});
 
-    $self->{feersum}->psgi_request_handler(sub {
+    my $app = sub {
         my $env = shift;
 
         return sub {
@@ -311,7 +326,15 @@ sub serve {
 
             $self->_handle_request($c);
         };
-    });
+    };
+
+    foreach my $middleware_spec (@{ $self->{middleware_specs} }) {
+        my @s = @$middleware_spec;
+        my $pkg = shift(@s);
+        $app = $pkg->wrap($app, @s);
+    }
+
+    $self->{feersum}->psgi_request_handler($app);
 
     return if $self->{quiet};
 
@@ -394,7 +417,7 @@ sub _do_routing {
     my $path = $c->{env}->{PATH_INFO};
     $path = '/' if $path eq '';
 
-    die 404 unless $path =~ $self->{route_regexp};
+    die "404: Not Found" unless $path =~ $self->{route_regexp};
 
     my $route_params = \%+;
 
@@ -404,7 +427,7 @@ sub _do_routing {
 
     my $func = $methods->{$method};
 
-    die 405 if !$func;
+    die "405: Method Not Allowed" if !$func;
 
     $c->{route_params} = $route_params;
 
@@ -498,14 +521,15 @@ C<logging.timezone> - Either C<gmtime> or C<localtime> (C<gmtime> is default, se
 
 =item C<middleware>
 
-Any array-ref of L<Plack::Middleware> packages.
+Any array-ref of L<Plack::Middleware> packages. Either strings representing packages, or an array-ref where the first element is the package and the rest are the arguments to the middleware.
+
+The strings representing packages can either be prefixed with C<Plack::Middleware::> or not. If not, it will try the package as is and if that doesn't exist, it will try adding the C<Plack::Middleware::> prefix.
 
     middleware => [
         'Plack::Middleware::ContentLength',
+        'ETag',
         ['Plack::Middleware::CrossOrigin', origins => '*'],
     ],
-
-FIXME: this is not fully implemented yet...
 
 =item C<pre_route>
 
@@ -525,6 +549,10 @@ Routes are specified when you create the C<Chouette> object.
 
         '/myapi/resource/:resource_id' => {
             GET => 'MyAPI::Resource::get_by_id',
+            POST => sub {
+                my $c = shift;
+                die "400: can't update ID " . $c->route_params->{resource_id};
+            },
         },
     },
 
@@ -709,6 +737,7 @@ These files are a complete-ish Chouette application that I have extracted from a
                 timezone => 'localtime',
             },
         },
+
         middleware => [
             'Plack::Middleware::ContentLength',
         ],

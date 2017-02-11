@@ -1,0 +1,4 @@
+* should be able to use tasks from anonymous subs (without needing a separate file)
+* Plack::Response support for adding extra headers etc
+* Use of undocumented env hash in examples: $c->{env}->{PATH_INFO}
+? 'stash' to store stuff such as user_id (like in catalyst)

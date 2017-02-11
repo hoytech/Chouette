@@ -5,6 +5,7 @@ use Test::More tests => 1;
 use File::Temp;
 use Chouette;
 use AnyEvent::HTTP;
+use AnyEvent::Socket;
 
 my $dir = File::Temp::tempdir(CLEANUP => 1);
 

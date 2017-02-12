@@ -458,15 +458,15 @@ Chouette - REST API Framework
 
 L<Chouette> is a framework for making asynchronous HTTP services. It makes some opinionated design choices, but is otherwise fairly flexible.
 
-L<AnyEvent> is used as the glue to connect all the asynchronous libraries, although Chouette depends on L<Feersum> and therefore L<EV> for its event loop. It uses L<Feersum> in PSGI mode so it can use L<Plack> for request parsing, and has support for L<Plack::Middleware> wrappers. L<Feersum> is the least conservative choice in the stack but there aren't very many alternatives (L<Twiggy> is a possibility but you need a hack to use unix sockets and is also somewhat buggy).
+L<AnyEvent> is used as the glue to connect all the asynchronous libraries, although Chouette depends on L<Feersum> and therefore L<EV> for its event loop. It uses L<Feersum> in PSGI mode so it can use L<Plack> for request parsing, and has support for L<Plack::Middleware> wrappers. L<Feersum> is the least conservative choice in the stack but there aren't very many alternatives (L<Twiggy> is a possibility but it is somewhat buggy and you need a hack to use unix sockets).
 
-Chouette generally assumes that its input will be C<application/x-www-form-urlencoded>. L<Plack::Request::WithEncoding> is used so that text is properly decoded (we recommend UTF-8 of course). On the output side, the default is C<application/json> encoded with L<JSON::XS>. Both the input and output types can be modified, although this is not really documented yet.
+Chouette generally assumes that its input will be C<application/x-www-form-urlencoded>. L<Plack::Request::WithEncoding> is used so that text is properly decoded (we recommend UTF-8 of course). For output, the default is C<application/json> encoded with L<JSON::XS>. Both the input and output types can be modified, although this is only partially documented so far.
 
-Chouette apps can optionally load a config file and its format is C<YAML>, loaded with the L<YAML> module. L<Regexp::Assemble> is used to construct an efficient route-dispatch.
+Chouette apps can optionally load a config file and its format is C<YAML>, loaded with the L<YAML> module. L<Regexp::Assemble> is used for efficient route-dispatch.
 
-Leaving the above aside, Chouette's main purpose is to glue together several of my own modules into a cohesive whole. These modules have been designed to work together and I have used them all to build numerous services before, some of which handle a considerable amount of traffic and/or have very complicated requirements.
+The above aside, Chouette's main purpose is to glue together several of my own modules into a cohesive whole. These modules have been designed to work together and I have used them to build numerous services, some of which handle a considerable amount of traffic and/or have very complicated requirements.
 
-Chouette was extracted from some of these services I have built before, and I have given the extra effort required so that all the modules work together in the ways they were designed:
+Chouette was extracted from some of these services I have built before, and I have put in the extra effort required so that all the modules work together in the ways they were designed:
 
 =over
 
@@ -490,13 +490,13 @@ Note that Chouette also depends on L<Log::Defer::Viz> so C<log-defer-viz> will b
 
 =item L<Log::File::Rolling>
 
-To store the logs in files, and rotate them periodically. Also maintains a current symlink so you can simply run the following in a shell and you'll always see the latest logs as you need them:
+Store logs in files and rotate them periodically. Also maintains a current symlink so you can simply run the following in a shell and you'll always see the latest logs as you need them:
 
     $ log-defer-viz -F /var/myapi/logs/myapi.current.log
 
 =back
 
-Chouette will always depend on L<AnyEvent::Task>, L<Callback::Frame>, L<Session::Token>, and L<Log::Defer> so if your app also uses them then it is sufficient to depend on C<Chouette> alone.
+Chouette will always depend on L<AnyEvent::Task>, L<Callback::Frame>, L<Session::Token>, and L<Log::Defer> so if your app also uses these modules then it is sufficient to depend on C<Chouette> alone.
 
 Where does the name "Chouette" come from? A L<chouette|http://www.bkgm.com/variants/Chouette.html> is a multi-player, fast-paced backgammon game with lots of stuff going on at once, kind of like an asynchronous REST API server... Hmmm, a bit of a stretch isn't it? To be honest it's just a cool name and I love backgammon, especially chouettes with friends and beer. :)
 
@@ -605,7 +605,7 @@ See the C<bin/myapi>, C<lib/MyAPI/Task/PasswordHasher.pm>, and C<lib/MyAPI/Task/
 
 =item C<quiet>
 
-If set, suppress the "welcome" message:
+If set, suppress the start-up message which looks like so:
 
     ===============================================================================
 
@@ -645,7 +645,7 @@ The respond method sends a JSON response, which will be encoded from the first a
 
     $c->respond({ a => 1, b => 2, });
 
-Note: After responding, this method returns and your code continues. This is useful if you wish to do additional work after sending the response. If you call C<respond> on this context again, an error will be logged. The the second response will not be sent (it can't be since the connection is probably already closed).
+Note: After responding, this method returns and your code continues. This is useful if you wish to do additional work after sending the response. If you call C<respond> on this context again, an error will be logged. The second response will not be sent (it can't be since the connection is probably already closed).
 
 If you wish to stop processing, you can C<die> with the result from C<respond> since it returns a special object for this purpose:
 
@@ -671,9 +671,9 @@ If you wish to stop processing but not send a response:
 
     $c->done;
 
-You will need to send a response later, usually from an async callback. Note: If the last reference to the context is destroyed without a response being sent, a 500 "internal server error" response will be sent.
+You will need to send a response later, usually from an async callback. Note: If the last reference to the context is destroyed without a response being sent, the message C<no response was sent, sending 500> will be logged and a 500 "internal server error" response will be sent.
 
-You don't ever need to call C<done>. You can just C<return> from the handler instead. C<done> is just for convenience in case you are deeply nested in callbacks and don't want to worry about writing a bunch of nested returns.
+You don't ever need to call C<done>. You can just C<return> from the handler instead. C<done> is only for convenience in case you are deeply nested in callbacks and don't want to worry about writing a bunch of nested returns.
 
 =item C<respond_raw>
 

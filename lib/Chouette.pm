@@ -478,6 +478,8 @@ Allows us to perform blocking operations without holding up other requests.
 
 Makes exception handling simple and convenient. You can C<die> anywhere and it will only affect the request being currently handled.
 
+Important note: If you are using 3rd-party libraries that accept callbacks, please understand how L<Callback::Frame> works. You will usually need to pass C<fub {}> instead of C<sub {}> to these libraries. See the L<EXCEPTIONS> section for more details.
+
 =item L<Session::Token>
 
 For random identifiers such as session tokens (obviously).
@@ -568,9 +570,9 @@ See the C<lib/MyAPI/Auth.pm> file below for an example of the function.
 
 =item C<middleware>
 
-Any array-ref of L<Plack::Middleware> packages. Each element is either a string representing a function+package, or an array-ref where the first element is the package and the rest of the elements are the arguments to the middleware.
+Any array-ref of L<Plack::Middleware> packages. Each element is either a string representing a package+function, or an array-ref where the first element is the package+function and the rest of the elements are the arguments to the middleware.
 
-The strings representing packages can either be prefixed with C<Plack::Middleware::> or not. If not, it will try the package as is and if that doesn't exist, it will try adding the C<Plack::Middleware::> prefix.
+The strings representing packages can either be prefixed with C<Plack::Middleware::> or not. If not, it will try to C<require> the package as is and if that doesn't exist, it will try again with the C<Plack::Middleware::> prefix.
 
     middleware => [
         'Plack::Middleware::ContentLength',
@@ -633,23 +635,25 @@ and
 
 
 
-=head1 CONTEXT
+=head1 CONTEXT OBJECT
 
-There is a C<Chouette::Context> object passed into every handler. Typically we name it C<$c>. It represents the current request and various related items.
+For every request a C<Chouette::Context> object is created. This object is passed into the handler for the request. Typically we name the object C<$c>. Your code interacts with the request via the following methods on the context object:
 
 =over
 
 =item C<respond>
 
-The respond method sends a JSON response, which will be encoded from the first argument:
+The respond method sends a JSON response, the contents of which are encoded from the first argument:
 
     $c->respond({ a => 1, b => 2, });
 
-Note: After responding, this method returns and your code continues. This is useful if you wish to do additional work after sending the response. If you call C<respond> on this context again, an error will be logged. The second response will not be sent (it can't be since the connection is probably already closed).
+Note: After responding, this method returns and your code continues. This is useful if you wish to do additional work after sending the response. However, if you call C<respond> on this context again an error will logged. The second response will not be sent (it can't be since the connection is probably already closed).
 
-If you wish to stop processing, you can C<die> with the result from C<respond> since it returns a special object for this purpose:
+If you wish to stop processing after sending the response, you can C<die> with the result from C<respond> since it returns a special object for this purpose:
 
     die $c->respond({ a => 1, });
+
+See the L<EXCEPTIONS> section for more details on the use of exceptions in Chouette.
 
 C<respond> takes an optional second argument which is the HTTP response code (defaults to 200):
 
@@ -661,7 +665,7 @@ Note that processing continues here also. If you wish to terminate the processin
 
 The client will receive an HTTP response with the L<Feersum> default message ("Forbidden" in this case) and the JSON body will be C<{"error":"access denied"}>.
 
-This works too, except the response in the JSON body will just be "HTTP code 403":
+This works too, except the value of C<error> in the JSON body of the response will just be "HTTP code 403":
 
     die 403;
 
@@ -710,11 +714,11 @@ One would think this would return a L<Plack::Response> object. Unfortunately thi
 
 =item C<generate_token>
 
-Generates a random string using a default-config L<Session::Token> generator. The generator is created when the first request comes in so as to avoid a "cold" entropy pool immediately after a reboot (see the L<Session::Token> docs).
+Generates a random string using a default-config L<Session::Token> generator. The generator is created when the first token is needed so as to avoid a "cold" entropy pool immediately after a reboot (see the L<Session::Token> docs).
 
 =item C<task>
 
-Returns an <AnyEvent::Task> checkout object for the task with the given name:
+Returns an L<AnyEvent::Task> checkout object for the task with the given name:
 
     $c->task('db')->selectrow_hashref(q{ SELECT * FROM sometable WHERE id = ? },
                                       undef, $id, sub {
@@ -733,11 +737,113 @@ See L<AnyEvent::Task> for more details.
 
 
 
+=head1 EXCEPTIONS
+
+Assuming you are familiar with asynchronous programming, most of L<Chouette> should be straightforward. The only thing that might feel unusual is how exceptions are used.
+
+=head2 ERROR HANDLING
+
+Most asynchronous programs are unable to use exceptions to signal errors, since an error may occur in a callback being run by the event loop. If this callback throws an exception, there is nothing to catch it, except perhaps the event loop. Even if the event loop does catch it, it won't know which connection the exception is for, and so is unable to send a 500 error to that connection, or add it to that connection's log messages.
+
+Take the L<AnyEvent::DBI> library. This is how its error handling works:
+
+    $dbh->exec("SELECT * FROM no_such_table", sub {
+        my ($dbh, $rows, $rv) = @_;
+
+        if ($#_) {
+            # success
+        } else {
+            # failure. error message is in $@
+        }
+    });
+
+Whether or not the C<exec> call succeeded is indicated by the parameters to the callback. Note that even if there was a failure, the callback is called. You can think of this as a sort of "in-band" signalling. The fact that there was an error, and what exactly that error was, needs to be indicated by the callback's parameters in some way. Unfortunately every library does this slightly differently. Another alternative used by some libraries is to accept 2 callbacks, one of which is called in the success case, and the other in the failure case.
+
+But with both of these methods, what should the callback do? It can't just C<die> because there is nothing to catch it. With the L<EV> event loop you will see this:
+
+    EV: error in callback (ignoring): failure: ERROR:  relation "no_such_table" does not exist
+
+Even if you wrap an C<eval> or a L<Try::Tiny> C<try {} catch {}> around the code the same thing happens. The try/catch is in effect while installing the callback, but not when the callback is called.
+
+So as a result, asynchronous web servers usually can't throw exceptions to indicate errors. Generally they will respond to the client with an error message inside the callback:
+
+    $dbh->exec("SELECT * FROM no_such_table", sub {
+        my ($dbh, $rows, $rv) = @_;
+
+        if (!$#_) {
+            $context->respond_500_error("DB error: $@");
+            return;
+        }
+
+        # success
+    });
+
+There are several down-sides to this approach: Everywhere that might throw an error needs to have access to the context object. This often requires passing it as an argument around everywhere. Secondly, you might forget to handle an error (or it might be too inconvenient so you don't bother) and your success-case code will run on garbage data. Finally, and perhaps most importantly, what if some unexpected exception is thrown by your callback (or something that it calls). In this case the event loop will receive an exception.
+
+For these reasons, Chouette uses L<Callback::Frame> to deal with exceptions. The idea is that the exception handling code is carried around with your callbacks. For instance, this is how you would accomplish the same thing with Chouette:
+
+    my $dbh = $c->task('db');
+
+    $dbh->selectrow_arrayref("SELECT * FROM no_such_table", undef, sub {
+        my ($dbh, $rows) = @_;
+
+        # success
+
+        # also I can die here and it will get routed to the right request!
+    });
+
+The callback will only be invoked in the success case. If a failure occurs, an exception will be raised in the dynamic scope that was in effect when the callback was installed. Because Chouette installs a C<catch> handler for each request, an appropriate error will be sent to the client and added to the Chouette logs.
+
+Important note: Libraries like L<AnyEvent::Task> (which is what C<task> in the above example uses) are L<Callback::Frame>-aware. This means that you can pass C<sub {}> callbacks into them and they will automatically convert them to C<fub> for you.
+
+When using 3rd-party libraries, you must pass C<fub {}> instead. Also, you'll need to figure out how the library handles error cases, and throw exceptions as appropriate. For example, if you really wanted to use L<AnyEvent::DBI> (even though the L<AnyEvent::Task> version is superior in pretty much every way) this is what you would do:
+
+    $dbh->exec("SELECT * FROM no_such_table", fub {
+        my ($dbh, $rows, $rv) = @_;
+
+        if (!$#_) {
+            die "DB error: $@";
+        }
+
+        # success
+    });
+
+Note that the C<sub> has been changed to C<fub> and an exception is thrown for the error case.
+
+In summary, when installing callbacks you must use C<fub> except when the library is L<Callback::Frame>-aware.
+
+Please see the L<Callback::Frame> documentation for more specifics.
+
+
+=head2 CONTROL FLOW
+
+The other unusual thing about how Chouette uses exceptions is that it uses them for control flow as well as errors.
+
+As you can see in the C<respond> method documentation of the L<CHOUETTE OBJECT> section, you can C<die> with the result of the C<respond> method:
+
+    die $c->respond({ status => 'ok' });
+
+This works because C<respond> returns a special object specifically intended for this purpose. When it gets an exception, the main catch block checks if it is this object. If so, it just ignores the exception. This lets you terminate your current callback without worrying about C<return>ing.
+
+This catch block also checks if your exception starts with 3 digits followed by a word-break. If so, it considers this a special exception intended to send an HTTP response. For example, the following code will send a 404 Not Found response:
+
+    die "404: no such resource";
+
+The body of the response will be:
+
+    {"error":"no such resource"}
+
+You can even just throw a number:
+
+    die 404;
+
+Some people consider this usage of exceptions to be kind of a hack, but it does make for really nice code if you'll give it a chance.
+
 
 
 =head1 EXAMPLE
 
-These files are a complete-ish Chouette application that I have extracted from a real-world app. Warning: untested!
+These files represent a complete-ish Chouette application that I have extracted from a real-world app. Warning: untested!
 
 =over
 

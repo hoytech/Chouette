@@ -18,7 +18,7 @@ my %args = (
       'YAML' => 0,
 
       ## hoytech stuff
-      'AnyEvent::Task' => 0,
+      'AnyEvent::Task' => '0.804',
       'Callback::Frame' => 0,
       'Session::Token' => 0,
       'Log::Defer' => 0,

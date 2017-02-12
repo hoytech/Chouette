@@ -45,7 +45,7 @@ my $chouette = Chouette->new({
 
                 my $n = $c->req->parameters->{n} // die "400: need an n param";
 
-                $c->task('math')->times7($n, sub {
+                $c->task('math', timeout => 5)->times7($n, sub {
                     my ($math, $result) = @_;
 
                     $c->respond({ result => $result, });
@@ -57,6 +57,12 @@ my $chouette = Chouette->new({
     tasks => {
         math => {
             pkg => 'MyTask',
+            client => {
+                timeout => 10,
+            },
+            server => {
+                hung_worker_timeout => 30,
+            },
         },
     },
 });

@@ -18,7 +18,7 @@ sub times7 {
 
     logger->info("Hello from PID $$");
 
-    sleep 1;
+    select undef,undef,undef,1; # sleep for a second to demonstrate blocking
 
     return $arg * 7;
 }

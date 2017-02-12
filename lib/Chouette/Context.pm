@@ -67,7 +67,7 @@ sub DESTROY {
     my $self = shift;
 
     if (defined $self->{responder}) {
-        $self->logger->error("no callbacks issues response, sending 500");
+        $self->logger->error("no response was sent, sending 500");
         $self->respond({ error => 'internal server error' }, 500);
     }
 }

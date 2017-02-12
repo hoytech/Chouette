@@ -739,13 +739,15 @@ See L<AnyEvent::Task> for more details.
 
 =head1 EXCEPTIONS
 
-Assuming you are familiar with asynchronous programming, most of L<Chouette> should be straightforward. The only thing that might feel unusual is how exceptions are used.
+Assuming you are familiar with asynchronous programming, most of L<Chouette> should feel straightforward. The only thing that might be unfamiliar is how exceptions are used.
 
 =head2 ERROR HANDLING
 
-Most asynchronous programs are unable to use exceptions to signal errors, since an error may occur in a callback being run by the event loop. If this callback throws an exception, there is nothing to catch it, except perhaps the event loop. Even if the event loop does catch it, it won't know which connection the exception is for, and so is unable to send a 500 error to that connection, or add it to that connection's log messages.
+The first unusual thing about how Chouette uses exceptions is that it uses them for error conditions, in contrast to many other asynchronous frameworks.
 
-Take the L<AnyEvent::DBI> library. This is how its error handling works:
+Most asynchronous frameworks are unable to use exceptions to signal errors since an error may occur in a callback being run from the event loop. If this callback throws an exception, there will be nothing to catch it, except perhaps a catch block installed by the event loop. Even if the event loop does catch it, it won't know which connection the exception is for, and therefore won't be able to send a 500 error to that connection or add a message to that connection's log.
+
+Consider the L<AnyEvent::DBI> library. This is how its error handling works:
 
     $dbh->exec("SELECT * FROM no_such_table", sub {
         my ($dbh, $rows, $rv) = @_;
@@ -757,15 +759,15 @@ Take the L<AnyEvent::DBI> library. This is how its error handling works:
         }
     });
 
-Whether or not the C<exec> call succeeded is indicated by the parameters to the callback. Note that even if there was a failure, the callback is called. You can think of this as a sort of "in-band" signalling. The fact that there was an error, and what exactly that error was, needs to be indicated by the callback's parameters in some way. Unfortunately every library does this slightly differently. Another alternative used by some libraries is to accept 2 callbacks, one of which is called in the success case, and the other in the failure case.
+Even if C<exec> failed, the callback still gets called. Whether or not it succeeded is indicated by its parameters. You can think of this as a sort of "in-band" signalling. The fact that there was an error, and what exactly that error was, needs to be indicated by the callback's parameters in some way. Unfortunately every library does this slightly differently. Another alternative used by some libraries is to accept 2 callbacks, one of which is called in the success case, and the other in the failure case.
 
-But with both of these methods, what should the callback do? It can't just C<die> because there is nothing to catch it. With the L<EV> event loop you will see this:
+But with both of these methods, what should the callback do when it is notified of an error? It can't just C<die> because nothing will catch the exception. With the L<EV> event loop you will see this:
 
     EV: error in callback (ignoring): failure: ERROR:  relation "no_such_table" does not exist
 
 Even if you wrap an C<eval> or a L<Try::Tiny> C<try {} catch {}> around the code the same thing happens. The try/catch is in effect while installing the callback, but not when the callback is called.
 
-So as a result, asynchronous web servers usually can't throw exceptions to indicate errors. Generally they will respond to the client with an error message inside the callback:
+As a consequence of all this, asynchronous web frameworks usually cannot indicate errors with exceptions. Instead, they require you to respond to the client from inside the callback:
 
     $dbh->exec("SELECT * FROM no_such_table", sub {
         my ($dbh, $rows, $rv) = @_;
@@ -778,7 +780,7 @@ So as a result, asynchronous web servers usually can't throw exceptions to indic
         # success
     });
 
-There are several down-sides to this approach: Everywhere that might throw an error needs to have access to the context object. This often requires passing it as an argument around everywhere. Secondly, you might forget to handle an error (or it might be too inconvenient so you don't bother) and your success-case code will run on garbage data. Finally, and perhaps most importantly, what if some unexpected exception is thrown by your callback (or something that it calls). In this case the event loop will receive an exception.
+There are several down-sides to this approach: Everywhere an error might occur needs to have access to the context object. This often requires passing it as an argument around everywhere. Secondly, the error must be handled locally in each callback, rather than once in a catch-all error handler. Thirdly, you might forget to handle an error (or it might be too inconvenient so you don't bother) and your success-case code will run on garbage data. Finally, and perhaps most importantly, if some unexpected exception is thrown by your callback (or something that it calls) then the event loop will receive an exception and nothing will get logged or replied to.
 
 For these reasons, Chouette uses L<Callback::Frame> to deal with exceptions. The idea is that the exception handling code is carried around with your callbacks. For instance, this is how you would accomplish the same thing with Chouette:
 
@@ -789,14 +791,16 @@ For these reasons, Chouette uses L<Callback::Frame> to deal with exceptions. The
 
         # success
 
-        # also I can die here and it will get routed to the right request!
+        # Even if I can die here and it will get routed to the right request!
     });
 
 The callback will only be invoked in the success case. If a failure occurs, an exception will be raised in the dynamic scope that was in effect when the callback was installed. Because Chouette installs a C<catch> handler for each request, an appropriate error will be sent to the client and added to the Chouette logs.
 
-Important note: Libraries like L<AnyEvent::Task> (which is what C<task> in the above example uses) are L<Callback::Frame>-aware. This means that you can pass C<sub {}> callbacks into them and they will automatically convert them to C<fub> for you.
+Important note: Libraries like L<AnyEvent::Task> (which is what C<task> in the above example uses) are L<Callback::Frame>-aware. This means that you can pass C<sub {}> callbacks into them and they will automatically convert them to C<fub {}> callbacks for you.
 
 When using 3rd-party libraries, you must pass C<fub {}> instead. Also, you'll need to figure out how the library handles error cases, and throw exceptions as appropriate. For example, if you really wanted to use L<AnyEvent::DBI> (even though the L<AnyEvent::Task> version is superior in pretty much every way) this is what you would do:
+
+    my $dbh = new AnyEvent::DBI "DBI:Pg:dbname=mydb", "", "";
 
     $dbh->exec("SELECT * FROM no_such_table", fub {
         my ($dbh, $rows, $rv) = @_;

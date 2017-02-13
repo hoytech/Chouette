@@ -257,6 +257,8 @@ sub _start_task_servers {
         $checkout_done = \&{ "${pkg}::CHECKOUT_DONE" } if defined &{ "${pkg}::CHECKOUT_DONE" };
 
         AnyEvent::Task::Server::fork_task_server(
+            name => $task_name,
+
             listen => ['unix/', "$task_dir/$task_name.socket"],
 
             setup => sub {

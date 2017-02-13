@@ -17,7 +17,7 @@ use Data::Dumper;
 
 use Chouette::Context;
 
-our $VERSION = '0.101';
+our $VERSION = '0.102';
 
 
 

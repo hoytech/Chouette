@@ -784,16 +784,20 @@ There are several down-sides to this approach:
 
 =over
 
-=item
+=item *
+
 The error must be handled locally in each callback, rather than once in a catch-all error handler.
 
-=item
+=item *
+
 Everywhere an error might occur needs to have access to the context object. This often requires passing it as an argument around everywhere.
 
-=item
+=item *
+
 You might forget to handle an error (or it might be too inconvenient so you don't bother) and your success-case code will run on garbage data.
 
-=item
+=item *
+
 Perhaps most importantly, if some unexpected exception is thrown by your callback (or something that it calls) then the event loop will receive an exception and nothing will get logged or replied to.
 
 =back

@@ -780,7 +780,23 @@ As a consequence of all this, asynchronous web frameworks usually cannot indicat
         # success
     });
 
-There are several down-sides to this approach: Everywhere an error might occur needs to have access to the context object. This often requires passing it as an argument around everywhere. Secondly, the error must be handled locally in each callback, rather than once in a catch-all error handler. Thirdly, you might forget to handle an error (or it might be too inconvenient so you don't bother) and your success-case code will run on garbage data. Finally, and perhaps most importantly, if some unexpected exception is thrown by your callback (or something that it calls) then the event loop will receive an exception and nothing will get logged or replied to.
+There are several down-sides to this approach:
+
+=over
+
+=item
+The error must be handled locally in each callback, rather than once in a catch-all error handler.
+
+=item
+Everywhere an error might occur needs to have access to the context object. This often requires passing it as an argument around everywhere.
+
+=item
+You might forget to handle an error (or it might be too inconvenient so you don't bother) and your success-case code will run on garbage data.
+
+=item
+Perhaps most importantly, if some unexpected exception is thrown by your callback (or something that it calls) then the event loop will receive an exception and nothing will get logged or replied to.
+
+=back
 
 For these reasons, Chouette uses L<Callback::Frame> to deal with exceptions. The idea is that the exception handling code is carried around with your callbacks. For instance, this is how you would accomplish the same thing with Chouette:
 
@@ -799,8 +815,6 @@ The callback will only be invoked in the success case. If a failure occurs, an e
 Important note: Libraries like L<AnyEvent::Task> (which is what C<task> in the above example uses) are L<Callback::Frame>-aware. This means that you can pass C<sub {}> callbacks into them and they will automatically convert them to C<fub {}> callbacks for you.
 
 When using 3rd-party libraries, you must pass C<fub {}> instead. Also, you'll need to figure out how the library handles error cases, and throw exceptions as appropriate. For example, if you really wanted to use L<AnyEvent::DBI> (even though the L<AnyEvent::Task> version is superior in pretty much every way) this is what you would do:
-
-    my $dbh = new AnyEvent::DBI "DBI:Pg:dbname=mydb", "", "";
 
     $dbh->exec("SELECT * FROM no_such_table", fub {
         my ($dbh, $rows, $rv) = @_;

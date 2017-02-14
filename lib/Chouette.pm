@@ -1006,6 +1006,7 @@ These files represent a complete-ish Chouette application that I have extracted 
     }
 
     sub get_all {
+        my $c = shift;
         $c->logger->warn("denying access to get_all");
         die 403;
     }

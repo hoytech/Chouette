@@ -1079,7 +1079,9 @@ These files represent a complete-ish Chouette application that I have extracted 
 
 
     sub new {
-        my $config = shift;
+        my ($class, $config) = @_;
+
+        ## $config is your app's config, so you can get username/password/etc
 
         my $dbh = DBI->connect("dbi:Pg:dbname=myapi", '', '', {AutoCommit => 0, RaiseError => 1, PrintError => 0, })
             || die "couldn't connect to db";

@@ -580,6 +580,7 @@ The strings representing packages can either be prefixed with C<Plack::Middlewar
         'Plack::Middleware::ContentLength',
         'ETag',
         ['Plack::Middleware::CrossOrigin', origins => '*'],
+        ['Plack::Middleware::RealIP', header => 'X-Real-IP', trusted_proxy => [qw(127.0.0.1/24)], ],
     ],
 
 =item C<tasks>
@@ -894,6 +895,7 @@ These files represent a complete-ish Chouette application that I have extracted 
 
         middleware => [
             'Plack::Middleware::ContentLength',
+            ['Plack::Middleware::RealIP', header => 'X-Real-IP', trusted_proxy => [qw(127.0.0.1/24)], ],
         ],
 
         pre_route => 'MyAPI::Auth::authenticate',

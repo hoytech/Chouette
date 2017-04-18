@@ -814,14 +814,14 @@ For these reasons, Chouette uses L<Callback::Frame> to deal with exceptions. The
 
         # success
 
-        # Even if I can die here and it will get routed to the right request!
+        # even if I do die here it will get routed to the right request
     });
 
-The callback will only be invoked in the success case. If a failure occurs, an exception will be raised in the dynamic scope that was in effect when the callback was installed. Because Chouette installs a C<catch> handler for each request, an appropriate error will be sent to the client and added to the Chouette logs.
+The callback will only be invoked in the success case. If C<selectrow_arrayref> fails, an exception will be raised in the dynamic scope that was in effect when the callback was installed. The same goes if an exception is thrown by the callback passed to C<selectrow_arrayref>. Because Chouette installs a C<catch> handler for each request, the appropriate errors will be sent to the client and added to the Chouette logs.
 
-Important note: Libraries like L<AnyEvent::Task> (which is what C<task> in the above example uses) are L<Callback::Frame>-aware. This means that you can pass C<sub {}> callbacks into them and they will automatically convert them to C<fub {}> callbacks for you.
+Important note: Libraries like L<AnyEvent::Task> (which is what C<task> in the above example uses) are L<Callback::Frame>-aware. This means that you can pass C<sub {}> callbacks into them and they will automatically convert them to C<fub {}> callbacks for you (but you can pass in C<fub>s too, that's harmless).
 
-When using 3rd-party libraries, you must pass C<fub {}> instead. Also, you'll need to figure out how the library handles error cases, and throw exceptions as appropriate. For example, if you really wanted to use L<AnyEvent::DBI> (even though the L<AnyEvent::Task> version is superior in pretty much every way) this is what you would do:
+When using 3rd-party libraries, you must pass C<fub {}> instead. Also, you'll need to figure out how the library handles error cases and throw exceptions as appropriate. For example, if you really wanted to use L<AnyEvent::DBI> (even though the L<AnyEvent::Task> version is superior in pretty much every way) this is what you would do:
 
     $dbh->exec("SELECT * FROM no_such_table", fub {
         my ($dbh, $rows, $rv) = @_;
@@ -835,7 +835,7 @@ When using 3rd-party libraries, you must pass C<fub {}> instead. Also, you'll ne
 
 Note that the C<sub> has been changed to C<fub> and an exception is thrown for the error case.
 
-In summary, when installing callbacks you must use C<fub> except when the library is L<Callback::Frame>-aware.
+In summary, when installing callbacks you must use C<fub> except when the library is L<Callback::Frame>-aware (in which case C<fub> is optional).
 
 Please see the L<Callback::Frame> documentation for more specifics.
 
@@ -862,7 +862,7 @@ You can even just throw a number:
 
     die 404;
 
-Some people consider this usage of exceptions to be kind of a hack, but it does make for really nice code if you'll give it a chance.
+Some people might consider this usage of exceptions to be kind of a hack, but it does make for really nice code if you'll give it a chance.
 
 
 
